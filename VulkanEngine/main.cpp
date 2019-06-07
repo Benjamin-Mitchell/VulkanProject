@@ -229,7 +229,7 @@ private:
 		createGraphicsPipeline();
 		createFramebuffers();
 		createCommandPool();
-		createVertexBuffers();
+		createVertexBuffer();
 		createCommandBuffers();
 		createSyncObjects();
 	}
@@ -892,40 +892,101 @@ private:
 		throw std::runtime_error("Failed to find a suitable memory type!");
 	}
 
-	void createVertexBuffers() {
+	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+		VkBuffer &buffer, VkDeviceMemory &bufferMemory)
+	{
 		VkBufferCreateInfo bufferCreateInfo = {};
 		bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferCreateInfo.size = sizeof(vertices[0]) * vertices.size();
-		bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		bufferCreateInfo.size = size;
+		bufferCreateInfo.usage = usage;
 		bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		bufferCreateInfo.flags = 0;
 
-		if (vkCreateBuffer(device, &bufferCreateInfo, nullptr, &vertexBuffer) != VK_SUCCESS) {
+		if (vkCreateBuffer(device, &bufferCreateInfo, nullptr, &buffer) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create vertex buffer!");
 		}
 
 		VkMemoryRequirements bufferMemoryRequirements;
-		vkGetBufferMemoryRequirements(device, vertexBuffer, &bufferMemoryRequirements);
+		vkGetBufferMemoryRequirements(device, buffer, &bufferMemoryRequirements);
 
 
 		VkMemoryAllocateInfo memoryAllocateInfo = {};
 		memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		memoryAllocateInfo.allocationSize = bufferMemoryRequirements.size;
-		//HOST_VISIBLE makes memory visible and editable on the CPU.
-		//HOST_COHERENT ensures memory will be visible on the GPU before next call to vkQueueSubmit.
 		memoryAllocateInfo.memoryTypeIndex = findMemoryType(bufferMemoryRequirements.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			properties);
 
-		if (vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS) {
+		if (vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate vertex buffer memory!");
 		}
 
-		vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+		vkBindBufferMemory(device, buffer, bufferMemory, 0);
+	}
+
+	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+		//Consider using a seperate temporary command pool for this instead
+		//to allow for memory allocation optimsations.
+
+		VkCommandBufferAllocateInfo cmdBufferAllocateInfo = {};
+		cmdBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cmdBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		cmdBufferAllocateInfo.commandPool = commandPool;
+		cmdBufferAllocateInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(device, &cmdBufferAllocateInfo, &commandBuffer);
+
+		VkCommandBufferBeginInfo cmdBufferBeginInfo = {};
+		cmdBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		cmdBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		vkBeginCommandBuffer(commandBuffer, &cmdBufferBeginInfo);
+
+		VkBufferCopy copyRegion = {};
+		copyRegion.srcOffset = 0;
+		copyRegion.dstOffset = 0;
+		copyRegion.size = size;
+		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+		vkEndCommandBuffer(commandBuffer);
+
+		VkSubmitInfo cmdBufferSubmitInfo = {};
+		cmdBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		cmdBufferSubmitInfo.commandBufferCount = 1;
+		cmdBufferSubmitInfo.pCommandBuffers = &commandBuffer;
+
+		vkQueueSubmit(graphicsQueue, 1, &cmdBufferSubmitInfo, VK_NULL_HANDLE);
+		vkQueueWaitIdle(graphicsQueue);
+
+		vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+	}
+
+	void createVertexBuffer() {
+		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+		//Create a staging buffer for CPU mapping of data
+		VkBuffer stagingBuffer;
+
+
+		//HOST_VISIBLE makes memory visible and editable on the CPU.
+		//HOST_COHERENT ensures memory will be visible on the GPU before next call to vkQueueSubmit.
+		VkDeviceMemory stagingBufferMemory;
+		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
 		void* data;
-		vkMapMemory(device, vertexBufferMemory, 0, bufferCreateInfo.size, 0, &data);
-		memcpy(data, vertices.data(), (size_t)bufferCreateInfo.size);
-		vkUnmapMemory(device, vertexBufferMemory);
+		vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+		memcpy(data, vertices.data(), (size_t)bufferSize);
+		vkUnmapMemory(device, stagingBufferMemory);
+
+		//create a GPU-local buffer to copy staging buffer data into.
+		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+
+		copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		vkFreeMemory(device, stagingBufferMemory, nullptr);
 	}
 
 	void createCommandBuffers() {
