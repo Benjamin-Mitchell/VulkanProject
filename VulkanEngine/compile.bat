@@ -1,3 +1,3 @@
-F:\VulkanSDK\1.1.92.1\Bin32\glslangValidator.exe -V BaseShader.vert
-F:\VulkanSDK\1.1.92.1\Bin32\glslangValidator.exe -V BaseShader.frag
+C:\Users\benjamin.mitchell\Documents\lib\Vulkan\1.1.106.0\Bin32\glslangValidator.exe -V BaseShader.vert
+C:\Users\benjamin.mitchell\Documents\lib\Vulkan\1.1.106.0\Bin32\glslangValidator.exe -V BaseShader.frag
 pause
