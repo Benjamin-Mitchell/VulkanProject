@@ -7,4 +7,8 @@ I'll be uploading it publicly as i progress, so feel free to have a look at what
 
 If you would like to contribute and discuss what is best for performance/visual reasons etc. please feel free to.
 
-The project will be a mix of tutorial API implementation and experimentation of popular graphics techniques.
+If learning is your goal, you're more than welcome to read throuh the code, or feel free to send me questions.
+
+The basis of this Vulkan project, as well as my favourite source of Vulkan wisdom can be found [here](https://vulkan-tutorial.com) (Thank you Overv!!). 
+
+You can also find Overv's code for the tutorials [here](https://github.com/Overv/VulkanTutorial).
