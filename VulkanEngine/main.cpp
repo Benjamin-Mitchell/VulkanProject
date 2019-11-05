@@ -7,7 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include <std_image.h>
+#include "std_image.h"
 
 #include <iostream>
 #include <stdexcept>
