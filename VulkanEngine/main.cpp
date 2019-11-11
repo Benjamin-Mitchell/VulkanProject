@@ -1,6 +1,3 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -13,6 +10,9 @@
 #include <stdexcept>
 #include <functional>
 #include <cstdlib>
+
+#include "Platform/Platform.h"
+#include <vulkan/vulkan.hpp>
 
 #include <chrono>
 #include <map>
@@ -141,14 +141,14 @@ const std::vector<uint16_t> indices = {
 class HelloTriangleApplication {
 public:
 	void run() {
-		initWindow();
+		initPlatform();
 		initVulkan();
 		mainLoop();
 		cleanup();
 	}
 
 private:
-	GLFWwindow* window;
+	PlatformHandler *platform;
 	VkInstance instance;
 	VkDebugUtilsMessengerEXT debugMessenger;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
@@ -190,21 +190,9 @@ private:
 
 	bool frameBufferResized = false;
 
-	void initWindow() {
-		glfwInit();
-		
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-		window = glfwCreateWindow(WIDTH, HEIGHT, "VulkanEngine", nullptr, nullptr);
-		glfwSetWindowUserPointer(window, this);
-		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-	}
-
-	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
-		app->frameBufferResized = true;
+	void initPlatform() {
+		platform = getCorrectPlatformHandle(platform);
+		platform->init();
 	}
 
 	bool checkValidationLayerSupport() {
@@ -235,18 +223,17 @@ private:
 	}
 
 	std::vector<const char*> getRequiredExtensions() {
-		uint32_t glfwExtensionCount = 0;
-		const char** glfwExtensions;
 
-		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+		uint32_t extensionCount = 0;
+		const char** extensions = platform->getExtensions(extensionCount);
 
-		std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+		std::vector<const char*> extensionsList(extensions, extensions + extensionCount);
 
 		if (enableValidationLayers) {
-			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+			extensionsList.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
 
-		return extensions;
+		return extensionsList;
 	}
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -404,9 +391,8 @@ private:
 	}
 
 	void createSurface() {
-		if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
-			throw std::runtime_error("Could not create Window Surface with GLFW!");
-		}
+		platform->createSurface(instance, surface);
+		
 	}
 
 	void pickPhysicalDevice() {
@@ -590,7 +576,7 @@ private:
 		} else { 
 			// if width and height are set to max uint32_t value if SwapChain extent is allowed to differ from window width/height.
 			int width, height;
-			glfwGetFramebufferSize(window, &width, &height);
+			platform->window->getActualSize(width, height);
 			VkExtent2D actualExtent = { width, height};
 
 			actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
@@ -1520,8 +1506,7 @@ private:
 	}
 
 	void mainLoop() {
-		while (!glfwWindowShouldClose(window)) {
-			glfwPollEvents();
+		while (platform->safeToUpdate()) {
 			drawFrame();
 		}
 
@@ -1651,12 +1636,8 @@ private:
 		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 	}
 
-	void recreateSwapChain() {
-		int width = 0, height = 0;
-		while (width == 0 || height == 0) {
-			glfwGetFramebufferSize(window, &width, &height);
-			glfwWaitEvents();
-		}
+	void recreateSwapChain() {		
+		platform->window->waitForSafeToRecreate();
 
 		vkDeviceWaitIdle(device);
 
@@ -1706,10 +1687,9 @@ private:
 
 		vkDestroySurfaceKHR(instance, surface, nullptr);
 		vkDestroyInstance(instance, nullptr);
-
-		glfwDestroyWindow(window);
-
-		glfwTerminate();
+		
+		//TODO: check this actually works
+		platform->cleanup();
 	}
 };
 
