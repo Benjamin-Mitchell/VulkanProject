@@ -23,15 +23,6 @@ void WindowsWindow::init()
 	glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 }
 
-void WindowsWindow::resize()
-{
-	int width = 0, height = 0;
-	while (width == 0 || height == 0) {
-		glfwGetFramebufferSize(window, &width, &height);
-		glfwWaitEvents();
-	}
-}
-
 void WindowsWindow::destroy()
 {
 	glfwDestroyWindow(window);

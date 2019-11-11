@@ -11,8 +11,8 @@
 #include <functional>
 #include <cstdlib>
 
+//platform also includes vulkan.hpp
 #include "Platform/Platform.h"
-#include <vulkan/vulkan.hpp>
 
 #include <chrono>
 #include <map>

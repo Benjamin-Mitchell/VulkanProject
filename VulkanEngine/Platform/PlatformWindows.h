@@ -1,6 +1,5 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include "PlatformHandler.h"
@@ -10,7 +9,6 @@ class WindowsWindow : public Window
 public:
 	void init();
 	void destroy();
-	void resize();
 	void getActualSize(int& w, int& h);
 	void waitForSafeToRecreate();
 	GLFWwindow* window;

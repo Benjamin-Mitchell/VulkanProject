@@ -11,7 +11,7 @@ class Window
 public:
 	virtual void init() {};
 	virtual void destroy() {};
-	virtual void resize() {};
+	//virtual void resize() {};
 
 	inline int getWidth() { return width; };
 	inline int getHeight() { return height; };
