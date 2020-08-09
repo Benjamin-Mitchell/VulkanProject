@@ -22,6 +22,10 @@
 #include <fstream>
 #include <array>
 
+#include "../../VDM.h"
+
+#define USE_VDM 1
+
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
@@ -173,7 +177,9 @@ private:
 	VkDeviceMemory indexBufferMemory;
 	std::vector<VkBuffer> uniformBuffers;
 	std::vector<VkDeviceMemory> uniformBuffersMemory;
+#if !USE_VDM
 	VkDescriptorPool descriptorPool;
+#endif
 	std::vector<VkDescriptorSet> descriptorSets;
 	VkImage textureImage;
 	VkDeviceMemory textureImageMemory;
@@ -280,11 +286,13 @@ private:
 		createVertexBuffer();
 		createIndexBuffer();
 		createUniformBuffers();
+#if !USE_VDM
 		createDescriptorPool();
+#endif
 		createDescriptorSets();
 		createCommandBuffers();
 		createSyncObjects();
-	}
+	}	
 
 	void createInstance() {
 		if (enableValidationLayers && !checkValidationLayerSupport()) {
@@ -307,7 +315,7 @@ private:
 		auto glfwExtensions = getRequiredExtensions();
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(glfwExtensions.size());
 		createInfo.ppEnabledExtensionNames = glfwExtensions.data();
-
+		
 		if (enableValidationLayers) {
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 			createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -1365,29 +1373,43 @@ private:
 
 	void createDescriptorSets() {
 		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), descriptorSetLayout);
+#if !USE_VDM
 		VkDescriptorSetAllocateInfo descriptorAllocateInfo = {};
 		descriptorAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		descriptorAllocateInfo.descriptorPool = descriptorPool;
 		descriptorAllocateInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
 		descriptorAllocateInfo.pSetLayouts = layouts.data();
-
+#endif
+		
 		descriptorSets.resize(swapChainImages.size());
+#if !USE_VDM
 		if (vkAllocateDescriptorSets(device, &descriptorAllocateInfo, descriptorSets.data())
 			!= VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate descriptor sets!");
 		}
+#endif
 
 		for (size_t i = 0; i < swapChainImages.size(); i++) {
+
+#if !USE_VDM
 			VkDescriptorBufferInfo bufferInfo = {};
 			bufferInfo.buffer = uniformBuffers[i];
 			bufferInfo.offset = 0;
 			bufferInfo.range = sizeof(UniformBufferObject);
+#else		
+			VdmAddBufferDescriptor(uniformBuffers[i], sizeof(UniformBufferObject), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0);
+#endif
 
+#if !USE_VDM
 			VkDescriptorImageInfo imageInfo = {};
 			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			imageInfo.imageView = textureImageView;
 			imageInfo.sampler = textureSampler;
+#else
+			VdmAddImageDescriptor(textureSampler, textureImageView, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, false, 1);
+#endif
 
+#if !USE_VDM
 			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			descriptorWrites[0].dstSet = descriptorSets[i];
@@ -1398,7 +1420,7 @@ private:
 			descriptorWrites[0].pBufferInfo = &bufferInfo;
 			descriptorWrites[0].pImageInfo = nullptr;
 			descriptorWrites[0].pTexelBufferView = nullptr;
-
+			
 			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			descriptorWrites[1].dstSet = descriptorSets[i];
 			descriptorWrites[1].dstBinding = 1;
@@ -1409,30 +1431,35 @@ private:
 			descriptorWrites[1].pImageInfo = &imageInfo;
 			descriptorWrites[1].pTexelBufferView = nullptr;
 			
-
+			
 			vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+#else
+			descriptorSets[i] = VdmGetDescriptorSet(device, layouts[i]);
+#endif
 		}
 	}
 
+
 	void createDescriptorPool() {
-
+#if !USE_VDM
 		std::array<VkDescriptorPoolSize, 2> poolSizes = {};
-
+	
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
-
+	
 		VkDescriptorPoolCreateInfo poolInfo = {};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 		poolInfo.pPoolSizes = poolSizes.data();
 		poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size());
 		poolInfo.flags = 0;
-
+	
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create descriptor pool!");
 		}
+#endif
 	}
 
 	void createCommandBuffers() {
@@ -1589,7 +1616,8 @@ private:
 		// directly before Queue Submit incase this function returns due to out of date swapchain above.
 		vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+		VkResult res = vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]);
+		if (res != VK_SUCCESS) {
 			throw std::runtime_error("failed to submit draw command buffer!");
 		}
 
@@ -1648,7 +1676,9 @@ private:
 			vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
 		}
 
+#if !USE_VDM
 		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+#endif
 	}
 
 	void recreateSwapChain() {
@@ -1669,7 +1699,9 @@ private:
 		createGraphicsPipeline();
 		createFramebuffers();
 		createUniformBuffers();
+#if !USE_VDM
 		createDescriptorPool();
+#endif	
 		createDescriptorSets();
 		createCommandBuffers();
 	}
